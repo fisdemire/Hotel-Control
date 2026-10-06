@@ -1,4 +1,5 @@
 include .env
+.EXPORT_ALL_VARIABLES:
 
 DB_DSN=host=$(DB_HOST) port=$(DB_PORT) user=$(DB_USER) password=$(DB_PASSWORD) dbname=$(DB_NAME) sslmode=$(DB_SSLMODE)
 
@@ -13,3 +14,6 @@ migrate-status:
 
 migrate-create:
 	goose -dir migrations create $(name) sql
+
+run: 
+	go run ./cmd/hotel
