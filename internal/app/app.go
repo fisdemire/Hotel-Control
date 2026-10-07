@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/fisdemire/Hotel-Control/config"
+	"github.com/fisdemire/Hotel-Control/internal/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,6 +23,14 @@ func New(cfg *config.Config, db *pgxpool.Pool) *App {
 
 func (a *App) Run() error {
 	r := gin.Default()
+
+	authHandler := auth.New(
+		a.db,
+		a.cfg.Auth.JWTSecret,
+		a.cfg.Auth.TokenTTL,
+	)
+
+	authHandler.RegisterRoutes(r)
 
 	r.GET("/health", func(c *gin.Context) {
 		if err := a.db.Ping(c.Request.Context()); err != nil {

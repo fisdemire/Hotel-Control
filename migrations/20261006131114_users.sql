@@ -8,8 +8,12 @@ CREATE TABLE users (
 
     password_hash TEXT NOT NULL,
 
+    name TEXT NOT NULL,
+
+    phone TEXT,
+
     role TEXT NOT NULL
-        CHECK (role IN ('admin', 'manager')),
+        CHECK (role IN ('guest', 'admin')),
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
