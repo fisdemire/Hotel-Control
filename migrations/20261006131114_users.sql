@@ -13,7 +13,7 @@ CREATE TABLE users (
     phone TEXT,
 
     role TEXT NOT NULL
-        CHECK (role IN ('guest', 'admin')),
+        CHECK (role IN ('guest', 'manager', 'admin')),
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

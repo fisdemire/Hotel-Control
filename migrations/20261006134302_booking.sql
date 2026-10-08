@@ -5,11 +5,12 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE TABLE bookings (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
-    user_id BIGINT NOT NULL
-        REFERENCES users(id),
-
     room_id BIGINT NOT NULL
         REFERENCES rooms(id),
+
+    guest_name TEXT NOT NULL,
+    guest_email TEXT NOT NULL,
+    guest_phone TEXT,
 
     check_in DATE NOT NULL,
     check_out DATE NOT NULL,
@@ -45,9 +46,6 @@ EXCLUDE USING gist (
     daterange(check_in, check_out, '[)') WITH &&
 )
 WHERE (status = 'confirmed');
-
-CREATE INDEX bookings_user_id_idx
-    ON bookings (user_id);
 
 CREATE INDEX bookings_check_in_idx
     ON bookings (check_in);
