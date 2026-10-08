@@ -5,6 +5,7 @@ import (
 
 	"github.com/fisdemire/Hotel-Control/config"
 	"github.com/fisdemire/Hotel-Control/internal/auth"
+	"github.com/fisdemire/Hotel-Control/internal/rooms"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -31,6 +32,12 @@ func (a *App) Run() error {
 	)
 
 	authHandler.RegisterRoutes(r)
+
+	rooms.Register(
+		r,
+		a.db,
+		auth.Require(a.cfg.Auth.JWTSecret, "admin"),
+	)
 
 	r.GET("/health", func(c *gin.Context) {
 		if err := a.db.Ping(c.Request.Context()); err != nil {
