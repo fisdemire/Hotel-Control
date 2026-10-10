@@ -2,32 +2,37 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/fisdemire/Hotel-Control/config"
 	"github.com/fisdemire/Hotel-Control/internal/app"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/fisdemire/Hotel-Control/internal/platform/postgres"
 )
 
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
+}
 
-	db, err := pgxpool.New(context.Background(), cfg.Postgres.DSN())
+func run() error {
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	db, err := postgres.NewPool(ctx, cfg.Postgres)
+	if err != nil {
+		return fmt.Errorf("connect to postgres: %w", err)
 	}
 	defer db.Close()
 
-	if err := db.Ping(context.Background()); err != nil {
-		log.Fatal(err)
-	}
-
-	a := app.New(cfg, db)
-
-	if err := a.Run(); err != nil {
-		log.Fatal(err)
-	}
+	return app.New(cfg, db).Run(ctx)
 }

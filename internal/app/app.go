@@ -1,12 +1,15 @@
 package app
 
 import (
+	"context"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/fisdemire/Hotel-Control/config"
-	"github.com/fisdemire/Hotel-Control/internal/auth"
-	"github.com/fisdemire/Hotel-Control/internal/booking"
-	"github.com/fisdemire/Hotel-Control/internal/rooms"
+	"github.com/fisdemire/Hotel-Control/internal/handler"
+	"github.com/fisdemire/Hotel-Control/internal/repository"
+	"github.com/fisdemire/Hotel-Control/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -23,41 +26,55 @@ func New(cfg *config.Config, db *pgxpool.Pool) *App {
 	}
 }
 
-func (a *App) Run() error {
+func (a *App) Run(ctx context.Context) error {
+	srv := &http.Server{
+		Addr:         a.cfg.Server.Addr,
+		Handler:      a.router(),
+		ReadTimeout:  a.cfg.Server.ReadTimeout,
+		WriteTimeout: a.cfg.Server.WriteTimeout,
+		IdleTimeout:  a.cfg.Server.IdleTimeout,
+	}
+
+	errCh := make(chan error, 1)
+
+	log.Printf("listening on %s", srv.Addr)
+
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		// сервер не смог стартовать или упал сам
+		return err
+	case <-ctx.Done():
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.Server.ShutdownTimeout)
+	defer cancel()
+
+	return srv.Shutdown(shutdownCtx)
+}
+
+func (a *App) router() *gin.Engine {
 	r := gin.Default()
 
-	authHandler := auth.New(
-		a.db,
-		a.cfg.Auth.JWTSecret,
-		a.cfg.Auth.TokenTTL,
-	)
+	userRepo := repository.NewUserRepository(a.db)
+	catalogRepo := repository.NewCatalogRepository(a.db)
+	bookingRepo := repository.NewBookingRepository(a.db)
 
-	authHandler.RegisterRoutes(r)
+	authSvc := service.NewAuthService(userRepo, a.cfg.Auth.JWTSecret, a.cfg.Auth.TokenTTL)
+	catalogSvc := service.NewCatalogService(catalogRepo)
+	bookingSvc := service.NewBookingService(bookingRepo, time.UTC)
 
-	admin := auth.Require(
-		a.cfg.Auth.JWTSecret,
-		"admin",
-	)
+	mw := handler.Middlewares{
+		Admin: handler.RequireRoles(authSvc, "admin"),
+		Staff: handler.RequireRoles(authSvc, "admin", "manager"),
+	}
 
-	staff := auth.Require(
-		a.cfg.Auth.JWTSecret,
-		"admin",
-		"manager",
-	)
-
-	rooms.Register(
-		r,
-		a.db,
-		admin,
-		staff,
-	)
-
-	booking.Register(
-		r,
-		a.db,
-		staff,
-		admin,
-	)
+	handler.NewAuthHandler(authSvc).Routes(r)
+	handler.NewCatalogHandler(catalogSvc).Routes(r, mw)
+	handler.NewBookingHandler(bookingSvc).Routes(r, mw)
 
 	r.GET("/health", func(c *gin.Context) {
 		if err := a.db.Ping(c.Request.Context()); err != nil {
@@ -72,13 +89,5 @@ func (a *App) Run() error {
 		})
 	})
 
-	srv := &http.Server{
-		Addr:         a.cfg.Server.Addr,
-		Handler:      r,
-		ReadTimeout:  a.cfg.Server.ReadTimeout,
-		WriteTimeout: a.cfg.Server.WriteTimeout,
-		IdleTimeout:  a.cfg.Server.IdleTimeout,
-	}
-
-	return srv.ListenAndServe()
+	return r
 }
